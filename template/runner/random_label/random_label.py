@@ -12,6 +12,7 @@ import sys
 import numpy as np
 # DeepDIVA
 import torch
+from torch.utils.data.sampler import SequentialSampler, BatchSampler
 
 import models
 from models.observer import Observer
@@ -64,6 +65,10 @@ class RandomLabel:
 
         # Setting up the dataloaders
         train_loader, val_loader, test_loader, num_classes = set_up_dataloaders(model_expected_input_size, **kwargs)
+
+        # Remove the "shuffle=True" for the train loader
+        train_loader.sampler = SequentialSampler(train_loader.dataset)
+        train_loader.batch_sampler = BatchSampler(train_loader.sampler, train_loader.batch_size, train_loader.drop_last)
 
         # Setting up model, optimizer, criterion
         model, criterion, optimizer, best_value, start_epoch = set_up_model(num_classes=num_classes,

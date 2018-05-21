@@ -96,9 +96,7 @@ def train(train_loader, model, criterion, optimizer, observer, observer_criterio
         input_features_var =  torch.autograd.Variable(model.module.features.data)
         target_var = torch.autograd.Variable(target)
 
-        #observer_acc, observer_loss = train_one_mini_batch(observer, observer_criterion, observer_optimizer, input_features_var, target_var, observer_loss_meter, observer_acc_meter)
-        observer_acc = acc
-        observer_loss = loss
+        observer_acc, observer_loss = train_one_mini_batch(observer, observer_criterion, observer_optimizer, input_features_var, target_var, observer_loss_meter, observer_acc_meter)
 
         # Add loss and accuracy to Tensorboard
         if multi_run is None:
