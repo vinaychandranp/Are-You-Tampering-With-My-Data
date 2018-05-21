@@ -1,9 +1,4 @@
-"""
-CNN with 3 conv layers and a fully connected classification layer
-"""
-
 import torch.nn as nn
-
 
 class Flatten(nn.Module):
     """
@@ -17,24 +12,20 @@ class Flatten(nn.Module):
         return x
 
 
-class CNN_basic(nn.Module):
+class Observer(nn.Module):
     """
-    Simple feed forward convolutional neural network
+    Simple single linear layer
 
     Attributes
     ----------
-    conv1 : torch.nn.Conv2d
-    conv2 : torch.nn.Conv2d
-    conv3 : torch.nn.Conv2d
-        Convolutional layers of the network
     fc : torch.nn.Linear
         Final classification fully connected layer
 
     """
 
-    def __init__(self, output_channels=10, input_channels=3, **kwargs):
+    def __init__(self, output_channels=10, input_channels=288, **kwargs):
         """
-        Creates an CNN_basic model from the scratch.
+        Creates a single layer observer
 
         Parameters
         ----------
@@ -43,30 +34,15 @@ class CNN_basic(nn.Module):
         input_channels : int
             Dimensionality of the input, typically 3 for RGB
         """
-        super(CNN_basic, self).__init__()
-        self.features = None
-        self.expected_input_size = (32, 32)
+        super(Observer, self).__init__()
 
-        # First layer
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(input_channels, 24, kernel_size=5, stride=3),
-            nn.LeakyReLU()
-        )
-        # Second layer
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(24, 48, kernel_size=3, stride=2),
-            nn.LeakyReLU()
-        )
-        # Third layer
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(48, 72, kernel_size=3, stride=1),
-            nn.LeakyReLU()
-        )
+        self.expected_input_size = 288  # Last layer of CNN_Basic
+        self.output_channels = output_channels
 
         # Classification layer
         self.fc = nn.Sequential(
             Flatten(),
-            nn.Linear(288, output_channels)
+            nn.Linear(input_channels, self.output_channels)
         )
 
     def forward(self, x):
@@ -83,9 +59,5 @@ class CNN_basic(nn.Module):
         Variable
             Activations of the fully connected layer
         """
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        self.features = x
         x = self.fc(x)
         return x
