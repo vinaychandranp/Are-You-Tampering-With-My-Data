@@ -87,7 +87,7 @@ class RandomLabel:
         val_value = np.zeros((epochs + 1 - start_epoch))
         train_value = np.zeros((epochs - start_epoch))
 
-        val_value[-1] = RandomLabel._validate(val_loader, model, criterion, writer, -1, **kwargs)
+        val_value[-1] = RandomLabel._validate(val_loader, model, criterion, observer, observer_criterion, writer, -1, **kwargs)
         for epoch in range(start_epoch, epochs):
             # Train
             train_value[epoch] = RandomLabel._train(train_loader,
@@ -97,13 +97,13 @@ class RandomLabel:
 
             # Validate
             if epoch % validation_interval == 0:
-                val_value[epoch] = RandomLabel._validate(val_loader, model, criterion, writer, epoch, **kwargs)
+                val_value[epoch] = RandomLabel._validate(val_loader, model, criterion, observer, observer_criterion, writer, epoch, **kwargs)
             if decay_lr is not None:
                 adjust_learning_rate(lr=lr, optimizer=optimizer, epoch=epoch, decay_lr_epochs=decay_lr)
             best_value = checkpoint(epoch, val_value[epoch], best_value, model, optimizer, current_log_folder)
 
         # Test
-        test_value = RandomLabel._test(test_loader, model, criterion, writer, epochs - 1, **kwargs)
+        test_value = RandomLabel._test(test_loader, model, criterion, observer, observer_criterion, writer, epochs - 1, **kwargs)
         logging.info('Training completed')
 
         return train_value, val_value, test_value
@@ -129,9 +129,9 @@ class RandomLabel:
         return train.train(train_loader, model, criterion, optimizer, observer, observer_criterion, observer_optimizer, writer, epoch, **kwargs)
 
     @classmethod
-    def _validate(cls, val_loader, model, criterion, writer, epoch, **kwargs):
-        return evaluate.validate(val_loader, model, criterion, writer, epoch, **kwargs)
+    def _validate(cls, val_loader, model, criterion, observer, observer_criterion, writer, epoch, **kwargs):
+        return evaluate.validate(val_loader, model, criterion, observer, observer_criterion, writer, epoch, **kwargs)
 
     @classmethod
-    def _test(cls, test_loader, model, criterion, writer, epoch, **kwargs):
-        return evaluate.test(test_loader, model, criterion, writer, epoch, **kwargs)
+    def _test(cls, test_loader, model, criterion, observer, observer_criterion, writer, epoch, **kwargs):
+        return evaluate.test(test_loader, model, criterion, observer, observer_criterion, writer, epoch, **kwargs)

@@ -15,17 +15,21 @@ from util.misc import AverageMeter, _prettyprint_logging_label, save_image_and_l
 from util.visualization.confusion_matrix_heatmap import make_heatmap
 
 
-def validate(val_loader, model, criterion, writer, epoch, no_cuda=False, log_interval=20, **kwargs):
+def validate(val_loader, model, criterion, observer, observer_criterion, writer, epoch,
+             no_cuda=False, log_interval=20, **kwargs):
     """Wrapper for _evaluate() with the intent to validate the model."""
-    return _evaluate(val_loader, model, criterion, writer, epoch, 'val', no_cuda, log_interval, **kwargs)
+    return _evaluate(val_loader, model, criterion, observer, observer_criterion, writer, epoch, 'val',
+                     no_cuda, log_interval, **kwargs)
 
 
-def test(test_loader, model, criterion, writer, epoch, no_cuda=False, log_interval=20, **kwargs):
+def test(test_loader, model, criterion, observer, observer_criterion, writer, epoch, no_cuda=False,
+         log_interval=20, **kwargs):
     """Wrapper for _evaluate() with the intent to test the model"""
-    return _evaluate(test_loader, model, criterion, writer, epoch, 'test', no_cuda, log_interval, **kwargs)
+    return _evaluate(test_loader, model, criterion, observer, observer_criterion, writer, epoch, 'test',
+                     no_cuda, log_interval, **kwargs)
 
 
-def _evaluate(data_loader, model, criterion, writer, epoch, logging_label, no_cuda=False, log_interval=10, **kwargs):
+def _evaluate(data_loader, model, criterion, observer, observer_criterion, writer, epoch, logging_label, no_cuda=False, log_interval=10, **kwargs):
     """
     The evaluation routine
 
@@ -63,7 +67,9 @@ def _evaluate(data_loader, model, criterion, writer, epoch, logging_label, no_cu
     # Instantiate the counters
     batch_time = AverageMeter()
     losses = AverageMeter()
+    observer_loss_meter = AverageMeter()
     top1 = AverageMeter()
+    observer_acc_meter = AverageMeter()
     data_time = AverageMeter()
 
     # Switch to evaluate mode (turn off dropout & such )
@@ -94,6 +100,15 @@ def _evaluate(data_loader, model, criterion, writer, epoch, logging_label, no_cu
         # Compute output
         output = model(input_var)
 
+        # Get the features from second last layer
+        input_features_var = torch.autograd.Variable(model.module.features.data)
+
+        # Use observer on the features
+        observer_acc, observer_loss = evaluate_one_mini_batch(observer, observer_criterion,
+                                                              input_features_var, target_var,
+                                                              observer_loss_meter, observer_acc_meter)
+
+
         # Compute and record the loss
         loss = criterion(output, target_var)
         losses.update(loss.data[0], input.size(0))
@@ -101,6 +116,7 @@ def _evaluate(data_loader, model, criterion, writer, epoch, logging_label, no_cu
         # Compute and record the accuracy
         acc1 = accuracy(output.data, target, topk=(1,))[0]
         top1.update(acc1[0], input.size(0))
+
 
         # Get the predictions
         _ = [preds.append(item) for item in [np.argmax(item) for item in output.data.cpu().numpy()]]
@@ -110,11 +126,18 @@ def _evaluate(data_loader, model, criterion, writer, epoch, logging_label, no_cu
         if multi_run is None:
             writer.add_scalar(logging_label + '/mb_loss', loss.data[0], epoch * len(data_loader) + batch_idx)
             writer.add_scalar(logging_label + '/mb_accuracy', acc1.cpu().numpy(), epoch * len(data_loader) + batch_idx)
+            writer.add_scalar(logging_label + '/obs_mb_loss', observer_loss.data[0], epoch * len(data_loader) + batch_idx)
+            writer.add_scalar(logging_label + '/obs_mb_accuracy', observer_acc.cpu().numpy(), epoch * len(data_loader) + batch_idx)
         else:
             writer.add_scalar(logging_label + '/mb_loss_{}'.format(multi_run), loss.data[0],
                               epoch * len(data_loader) + batch_idx)
             writer.add_scalar(logging_label + '/mb_accuracy_{}'.format(multi_run), acc1.cpu().numpy(),
                               epoch * len(data_loader) + batch_idx)
+            writer.add_scalar(logging_label + '/obs_mb_loss_{}'.format(multi_run), observer_loss.data[0],
+                              epoch * len(data_loader) + batch_idx)
+            writer.add_scalar(logging_label + '/obs_mb_accuracy_{}'.format(multi_run), observer_acc.cpu().numpy(),
+                              epoch * len(data_loader) + batch_idx)
+
 
         # Measure elapsed time
         batch_time.update(time.time() - end)
@@ -141,10 +164,12 @@ def _evaluate(data_loader, model, criterion, writer, epoch, logging_label, no_cu
     # Logging the epoch-wise accuracy and confusion matrix
     if multi_run is None:
         writer.add_scalar(logging_label + '/accuracy', top1.avg, epoch)
+        writer.add_scalar(logging_label + '/obs_accuracy', observer_acc_meter.avg, epoch)
         save_image_and_log_to_tensorboard(writer, tag=logging_label + '/confusion_matrix',
                                           image_tensor=confusion_matrix_heatmap, global_step=epoch)
     else:
         writer.add_scalar(logging_label + '/accuracy_{}'.format(multi_run), top1.avg, epoch)
+        writer.add_scalar(logging_label + '/obs_accuracy_{}'.format(multi_run), observer_acc_meter.avg, epoch)
         save_image_and_log_to_tensorboard(writer, tag=logging_label + '/confusion_matrix_{}'.format(multi_run),
                                           image_tensor=confusion_matrix_heatmap, global_step=epoch)
 
@@ -174,3 +199,18 @@ def _log_classification_report(data_loader, epoch, preds, targets, writer):
     classification_report_string = classification_report_string.replace('avg', '      avg', 1)
 
     writer.add_text('Classification Report for epoch {}\n'.format(epoch), '\n' + classification_report_string, epoch)
+
+
+def evaluate_one_mini_batch(model, criterion, input_var, target_var, loss_meter, acc_meter):
+    # Compute output
+    output = model(input_var)
+
+    # Compute and record the loss
+    loss = criterion(output, target_var)
+    loss_meter.update(loss.data[0], len(input_var))
+
+    # Compute and record the accuracy
+    acc1 = accuracy(output.data, target_var.data, topk=(1,))[0]
+    acc_meter.update(acc1[0], len(input_var))
+
+    return acc1, loss
