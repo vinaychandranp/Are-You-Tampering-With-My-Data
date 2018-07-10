@@ -1,9 +1,11 @@
 # Utils
 import datetime
+import json
 import logging
 import time
-
+from sklearn.metrics import pairwise_distances
 import numpy as np
+
 # Torch related stuff
 from torch.autograd import Variable
 from tqdm import tqdm
@@ -28,37 +30,31 @@ def _evaluate_map(data_loader, model, criterion, writer, epoch, logging_label, n
 
     Parameters
     ----------
-    :param data_loader : torch.utils.data.DataLoader
+    data_loader : torch.utils.data.DataLoader
         The dataloader of the evaluation set
-
-    :param model : torch.nn.module
+    model : torch.nn.module
         The network model being used
-
-    :param criterion: torch.nn.loss
+    criterion: torch.nn.loss
         The loss function used to compute the loss of the model
-
-    :param writer : tensorboardX.writer.SummaryWriter
+    writer : tensorboardX.writer.SummaryWriter
         The tensorboard writer object. Used to log values on file for the tensorboard visualization.
-
-    :param epoch : int
+    epoch : int
         Number of the epoch (for logging purposes)
-
-    :param logging_label : string
+    logging_label : string
         Label for logging purposes. Typically 'test' or 'valid'. Its prepended to the logging output path and messages.
-
-    :param no_cuda : boolean
+    no_cuda : boolean
         Specifies whether the GPU should be used or not. A value of 'True' means the CPU will be used.
-
-    :param log_interval : int
+    log_interval : int
         Interval limiting the logging of mini-batches. Default value of 10.
-
-    :param map : str
+    map : str
         Specify value for mAP computation. Possible values are ("auto", "full" or specify K for AP@K)
 
-    :return:
-        None
+    Returns
+    -------
+    mAP : float
+        Mean average precision for evaluated on this split
+
     """
-    from sklearn.metrics import pairwise_distances
     multi_run = kwargs['run'] if 'run' in kwargs else None
 
     # Switch to evaluate mode (turn off dropout & such )
@@ -70,7 +66,7 @@ def _evaluate_map(data_loader, model, criterion, writer, epoch, logging_label, n
     multi_crop = False
 
     # Iterate over whole evaluation set
-    pbar = tqdm(enumerate(data_loader), total=len(data_loader), unit='batch', ncols=200)
+    pbar = tqdm(enumerate(data_loader), total=len(data_loader), unit='batch', ncols=150, leave=False)
     for batch_idx, (data, label) in pbar:
 
         # Check if data is provided in multi-crop form and process accordingly
@@ -78,6 +74,7 @@ def _evaluate_map(data_loader, model, criterion, writer, epoch, logging_label, n
             multi_crop = True
             bs, ncrops, c, h, w = data.size()
             data = data.view(-1, c, h, w)
+
         if not no_cuda:
             data = data.cuda()
 
@@ -89,7 +86,7 @@ def _evaluate_map(data_loader, model, criterion, writer, epoch, logging_label, n
         if multi_crop:
             out = out.view(bs, ncrops, -1).mean(1)
 
-        # Euclidean distance
+        # Store output
         outputs.append(out.data.cpu().numpy())
         labels.append(label.data.cpu().numpy())
 
@@ -103,19 +100,24 @@ def _evaluate_map(data_loader, model, criterion, writer, epoch, logging_label, n
     num_tests = len(data_loader.dataset.file_names)
     labels = np.concatenate(labels, 0).reshape(num_tests)
     outputs = np.concatenate(outputs, 0)
+
+    # Cosine similarity distance
     distances = pairwise_distances(outputs, metric='cosine', n_jobs=16)
     logging.debug('Computed pairwise distances')
     logging.debug('Distance matrix shape: {}'.format(distances.shape))
     t = time.time()
-    mAP_score = compute_mapk(distances, labels, k=map)
+    mAP, per_class_mAP = compute_mapk(distances, labels, k=map)
+    writer.add_text('Per class mAP at epoch {}\n'.format(epoch),
+                    json.dumps(per_class_mAP, indent=2, sort_keys=True))
+
     logging.debug('Completed evaluation of mAP in {}'.format(datetime.timedelta(seconds=int(time.time() - t))))
 
-    logging.info('\33[91m ' + logging_label + ' set: mAP: {}\n\33[0m'.format(mAP_score))
+    logging.info('\33[91m ' + logging_label + ' set: mAP: {}\n\33[0m'.format(mAP))
 
     # Logging the epoch-wise accuracy
     if multi_run is None:
-        writer.add_scalar(logging_label + '/mAP', mAP_score, epoch)
+        writer.add_scalar(logging_label + '/mAP', mAP, epoch)
     else:
-        writer.add_scalar(logging_label + '/mAP{}'.format(multi_run), mAP_score, epoch)
+        writer.add_scalar(logging_label + '/mAP{}'.format(multi_run), mAP, epoch)
 
-    return mAP_score
+    return mAP

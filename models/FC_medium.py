@@ -19,9 +19,11 @@ class FC_medium(nn.Module):
 
     Attributes
     ----------
-    fc1 : torch.nn.Linear
-    fc2 : torch.nn.Linear
-    fc3 : torch.nn.Linear
+    expected_input_size : int
+        Expected input size
+    fc1 : torch.nn.Sequential
+    fc2 : torch.nn.Sequential
+    fc3 : torch.nn.Sequential
         Fully connected layers of the network
     cl : torch.nn.Linear
         Final classification fully connected layer

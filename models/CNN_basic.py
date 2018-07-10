@@ -23,9 +23,11 @@ class CNN_basic(nn.Module):
 
     Attributes
     ----------
-    conv1 : torch.nn.Conv2d
-    conv2 : torch.nn.Conv2d
-    conv3 : torch.nn.Conv2d
+    expected_input_size : tuple(int,int)
+        Expected input size (width, height)
+    conv1 : torch.nn.Sequential
+    conv2 : torch.nn.Sequential
+    conv3 : torch.nn.Sequential
         Convolutional layers of the network
     fc : torch.nn.Linear
         Final classification fully connected layer
