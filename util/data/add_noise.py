@@ -12,7 +12,7 @@ def change_ext(path):
 
 def apply_mask_to_image(mask, image_path):
     img = cv2.imread(image_path)
-    img[mask[:, 0], mask[:, 1]] = [0, 255, 255]
+    img[mask[:, 0], mask[:, 1], 0] = 0
     os.remove(image_path)
     image_path = change_ext(image_path)
     cv2.imwrite(image_path, img)
