@@ -36,8 +36,11 @@ def main(args):
     mask = np.random.randint(low=0, high=img_shape[0], size=(num_points_to_scramble, 2))
 
     for file in files:
+        # If args are moving, mask is different for each image.
+        if args.moving == True:
+            mask = np.random.randint(low=0, high=img_shape[0], size=(num_points_to_scramble, 2))
+            print(mask)
         apply_mask_to_image(mask, file)
-
     return
 
 
@@ -52,6 +55,10 @@ if __name__ == "__main__":
                         default=None,
                         help='number of pixels to corrupt. IF not specified, 0.5% pixels of the image are corrupted',
                         type=int)
+    parser.add_argument('--moving',
+                        default=False,
+                        action='store_true',
+                        help='make the tamper 1px move. (Automatically enforces num-pixels to be 1)')
     args = parser.parse_args()
 
     main(args)
